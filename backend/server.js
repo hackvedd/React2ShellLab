@@ -20,8 +20,10 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    // KEEP ORIGINAL EXTENSION FOR RCE
-    cb(null, file.originalname);
+    // SECURE FILENAME GENERATION
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
   },
 });
 
@@ -32,31 +34,36 @@ app.post("/upload", upload.single("config"), (req, res) => {
     return res.status(400).json({ message: "No file uploaded." });
   }
 
+  // Sanitization & Validation
+  const allowedExtensions = [".json", ".txt", ".zip"];
+  const fileExt = path.extname(req.file.originalname).toLowerCase();
+
+  if (!allowedExtensions.includes(fileExt)) {
+    // Delete the potentially dangerous file
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (e) {}
+    return res
+      .status(400)
+      .json({ message: "Invalid file type. Protocol breach detected." });
+  }
+
   try {
-    const filePath = path.join(__dirname, "uploads/config", req.file.filename);
+    const fileName = path.basename(req.file.filename); // Prevent path traversal
+    console.log(`Resource registered: ${fileName}`);
 
-    // VULNERABLE LOGIC: Immediately require() the uploaded file
-    console.log(`Loading config from: ${filePath}`);
-
-    // Clear require cache before loading to ensure re-execution
-    try {
-      const resolvedPath = require.resolve(filePath);
-      delete require.cache[resolvedPath];
-    } catch (e) {
-      // Ignore if not in cache or path not resolvable (though file exists)
-    }
-
-    try {
-      require(filePath);
-    } catch (err) {
-      console.error("Error loading config:", err);
-      // Do NOT expose debug errors to client.
+    // SECURE LOGIC: Do not use require() or eval() on user content.
+    // Instead, just verify the file exists or process it as data.
+    if (fs.existsSync(req.file.path)) {
+      // Log metadata securely
+      const stats = fs.statSync(req.file.path);
+      console.log(`Vault integrity verified: ${stats.size} bytes`);
     }
 
     res.status(200).json({ message: "Configuration uploaded successfully." });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server Error" });
+    console.error("Cryptographic error:", error);
+    res.status(500).json({ message: "System failure during vault injection." });
   }
 });
 

@@ -10,8 +10,13 @@ export default function LoginPage() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate auth
-    if (email === "admin@astracart.io" && password === "AstraSecure2025") {
+    const sanitizedEmail = email.trim().toLowerCase();
+
+    // Simulate auth with sanitized inputs
+    if (
+      sanitizedEmail === "admin@astracart.io" &&
+      password === "AstraSecure2025"
+    ) {
       document.cookie = "auth=true; path=/";
       router.push("/admin");
     }
@@ -78,18 +83,6 @@ export default function LoginPage() {
               Synchronize_Access
             </button>
           </form>
-
-          <div className="mt-10 pt-8 border-t border-white/5 text-center">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
-              New Instance Deployment?
-            </p>
-            <Link
-              href="/auth/register"
-              className="text-xs font-black text-astracart-crimson uppercase tracking-widest hover:text-white transition-all italic"
-            >
-              Create_Infrastructure_Account
-            </Link>
-          </div>
         </div>
       </main>
 

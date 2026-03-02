@@ -1,6 +1,15 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+
+// Input Sanitization Utility
+const sanitizeInput = (str: string) => {
+  if (typeof str !== "string") return "";
+  return str
+    .replace(/[<>]/g, "") // Basic tag stripping
+    .trim()
+    .slice(0, 500); // Prevent buffer overflow/DOS via long strings
+};
 
 // Animated Counter Component
 const CountUp = ({
@@ -162,9 +171,19 @@ export default function AdminDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPluginModalOpen, setIsPluginModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setMounted(true);
+    const preventDefault = (e: DragEvent) => e.preventDefault();
+    window.addEventListener("dragover", preventDefault);
+    window.addEventListener("drop", preventDefault);
+    return () => {
+      window.removeEventListener("dragover", preventDefault);
+      window.removeEventListener("drop", preventDefault);
+    };
   }, []);
 
   if (!mounted) return null;
@@ -174,10 +193,10 @@ export default function AdminDashboard() {
     const formData = new FormData(e.target as HTMLFormElement);
     const newPrd = {
       id: editingProduct?.id || `PRD-X${Math.floor(Math.random() * 1000)}`,
-      name: formData.get("name") as string,
-      category: formData.get("category") as string,
-      stock: parseInt(formData.get("stock") as string),
-      price: parseInt(formData.get("price") as string),
+      name: sanitizeInput(formData.get("name") as string),
+      category: sanitizeInput(formData.get("category") as string),
+      stock: Math.max(0, parseInt(formData.get("stock") as string) || 0),
+      price: Math.max(0, parseInt(formData.get("price") as string) || 0),
       img:
         editingProduct?.img ||
         `https://api.dicebear.com/7.x/shapes/svg?seed=${Math.random()}&backgroundColor=0f172a`,
@@ -748,7 +767,10 @@ export default function AdminDashboard() {
                       </p>
                     </div>
                     <button
-                      onClick={() => setIsPluginModalOpen(true)}
+                      onClick={() => {
+                        setUploadedFile(null);
+                        setIsPluginModalOpen(true);
+                      }}
                       className="px-8 py-4 bg-astracart-crimson text-white font-black uppercase italic text-xs tracking-[0.2em] shadow-lg shadow-astracart-crimson/20 hover:scale-105 transition-all"
                     >
                       Initialize_New_Plugin
@@ -1007,7 +1029,10 @@ export default function AdminDashboard() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setIsPluginModalOpen(false)}
+                  onClick={() => {
+                    setUploadedFile(null);
+                    setIsPluginModalOpen(false);
+                  }}
                   className="text-slate-700 hover:text-white transition-all font-mono font-bold"
                 >
                   [DISCONNECT]
@@ -1020,22 +1045,57 @@ export default function AdminDashboard() {
                   const fd = new FormData(e.target as HTMLFormElement);
                   const newPlg = {
                     id: `PLG-${Math.floor(Math.random() * 100)}`,
-                    name: fd.get("p_name") as string,
-                    version: fd.get("p_version") as string,
-                    author: fd.get("p_author") as string,
-                    description: fd.get("p_desc") as string,
+                    name: sanitizeInput(fd.get("p_name") as string),
+                    version: sanitizeInput(fd.get("p_version") as string),
+                    author: sanitizeInput(fd.get("p_author") as string),
+                    description: sanitizeInput(fd.get("p_desc") as string),
                     status: true,
                   };
                   setPlugins([newPlg, ...plugins]);
+                  setUploadedFile(null);
                   setIsPluginModalOpen(false);
                 }}
                 className="space-y-8"
               >
                 {/* Drag and Drop Area */}
-                <div className="border-2 border-dashed border-white/10 rounded-xl p-10 text-center group hover:border-astracart-crimson/50 transition-all cursor-pointer bg-white/[0.02]">
-                  <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:bg-astracart-crimson/10 transition-all">
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const file = e.dataTransfer.files[0];
+                    if (file) setUploadedFile(file);
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-10 text-center group transition-all cursor-pointer bg-white/[0.02] ${
+                    isDragging
+                      ? "border-astracart-crimson bg-astracart-crimson/5 shadow-[0_0_30px_rgba(220,38,38,0.2)]"
+                      : "border-white/10 hover:border-astracart-crimson/50"
+                  }`}
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setUploadedFile(file);
+                    }}
+                    className="hidden"
+                    accept=".zip,.js"
+                  />
+                  <div
+                    className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 transition-all ${
+                      isDragging
+                        ? "bg-astracart-crimson text-white scale-110"
+                        : "bg-white/5 text-slate-600 group-hover:bg-astracart-crimson/10 group-hover:text-astracart-crimson"
+                    }`}
+                  >
                     <svg
-                      className="w-8 h-8 text-slate-600 group-hover:text-astracart-crimson transition-all"
+                      className="w-8 h-8"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1049,11 +1109,23 @@ export default function AdminDashboard() {
                     </svg>
                   </div>
                   <p className="text-xs font-black text-white uppercase tracking-widest mb-2">
-                    Drag_Drop_Plugin_Bundle
+                    {uploadedFile
+                      ? "Bundle_Ready_For_Injection"
+                      : "Drag_Drop_Plugin_Bundle"}
                   </p>
                   <p className="text-[9px] text-slate-600 font-mono italic">
-                    OR CLICK TO SELECT FROM ENCRYPTED STORAGE (.ZIP / .JS)
+                    {uploadedFile
+                      ? `SELECTED: ${uploadedFile.name.toUpperCase()} (${(uploadedFile.size / 1024).toFixed(1)} KB)`
+                      : "OR CLICK TO SELECT FROM ENCRYPTED STORAGE (.ZIP / .JS)"}
                   </p>
+                  {uploadedFile && (
+                    <div className="mt-4 flex items-center justify-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                      <span className="text-[8px] font-black text-green-500 uppercase tracking-widest">
+                        Protocol_Verified_Stable
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-6">
